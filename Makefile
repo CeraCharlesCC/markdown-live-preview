@@ -28,4 +28,4 @@ build-serve:
 
 .PHONY: deploy
 deploy:
-	firebase deploy
+	git push origin main
