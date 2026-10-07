@@ -13,7 +13,8 @@ html, body {
 body {
   display: flex;
   flex-direction: column;
-  height:100vh;
+  height: 100vh;
+  height: 100dvh;
 }
 
 h1, h2, h3, h4, h5, h6, p {
@@ -42,6 +43,7 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-sizing: border-box;
   padding: 8px 16px;
   width: 100%;
   background-color: #444;
@@ -306,21 +308,74 @@ footer {
 .editor-pane,
 .preview-pane {
   height: 100%;
+  min-width: 0;
 }
 
 .split-divider {
-  width: 5px;
-  background: #ccc;
+  position: relative;
+  flex: 0 0 25px;
+  width: 25px;
+  margin-left: -10px;
+  margin-right: -10px;
+  background: transparent;
   cursor: col-resize;
-  z-index: 1;
+  z-index: 1000;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-.split-divider.hover {
+.split-divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 5px;
+  transform: translateX(-50%);
+  background: #ccc;
+}
+
+.split-divider.hover::before {
   background: #999;
 }
 
-.split-divider.active {
+.split-divider.active::before {
   background: #666;
+}
+
+.split-divider:focus-visible {
+  outline: 2px solid #0969da;
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .split-divider {
+    flex-basis: 33px;
+    width: 33px;
+    margin-left: -14px;
+    margin-right: -14px;
+  }
+}
+
+@media screen and (max-width: 700px) {
+  header {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    padding: 8px 12px;
+  }
+
+  #menu-items {
+    flex: 1 1 calc(100% - 32px);
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 4px;
+  }
+
+  #github {
+    margin-left: auto;
+    padding-right: 0;
+  }
 }
 
 /* Dark theme overrides */
@@ -343,16 +398,20 @@ footer {
   border-bottom: 1px solid #1f2d3a;
 }
 
-[data-theme="dark"] .split-divider {
+[data-theme="dark"] .split-divider::before {
   background: #30363d;
 }
 
-[data-theme="dark"] .split-divider.hover {
+[data-theme="dark"] .split-divider.hover::before {
   background: #444c56;
 }
 
-[data-theme="dark"] .split-divider.active {
+[data-theme="dark"] .split-divider.active::before {
   background: #768390;
+}
+
+[data-theme="dark"] .split-divider:focus-visible {
+  outline-color: #539bf5;
 }
 
 [data-theme="dark"] footer {

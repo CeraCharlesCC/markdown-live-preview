@@ -565,73 +565,151 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         const leftPane = document.getElementById('edit');
         const rightPane = document.getElementById('preview');
         const container = document.getElementById('container');
+        const minPaneWidth = 100;
+        const keyboardStepRatio = 0.05;
 
         let isDragging = false;
+        let activePointerId = null;
+        let dragPointerOffset = 0;
 
-        divider.addEventListener('mouseenter', () => {
-            divider.classList.add('hover');
+        const getDividerMetrics = () => {
+            const containerRect = container.getBoundingClientRect();
+            const dividerStyle = getComputedStyle(divider);
+            const dividerWidth = divider.offsetWidth
+                + parseFloat(dividerStyle.marginLeft || 0)
+                + parseFloat(dividerStyle.marginRight || 0);
+            const availableWidth = Math.max(0, containerRect.width - dividerWidth);
+            const effectiveMinPaneWidth = Math.min(minPaneWidth, availableWidth / 2);
+
+            return {
+                containerRect,
+                dividerWidth,
+                availableWidth,
+                effectiveMinPaneWidth
+            };
+        };
+
+        const applyLeftWidth = (requestedLeftWidth, rememberRatio = true) => {
+            const metrics = getDividerMetrics();
+            if (metrics.availableWidth <= 0) return;
+
+            const maxLeftWidth = metrics.availableWidth - metrics.effectiveMinPaneWidth;
+            const leftWidth = Math.max(
+                metrics.effectiveMinPaneWidth,
+                Math.min(requestedLeftWidth, maxLeftWidth)
+            );
+            const rightWidth = metrics.availableWidth - leftWidth;
+            const actualRatio = leftWidth / metrics.availableWidth;
+
+            leftPane.style.width = leftWidth + 'px';
+            rightPane.style.width = rightWidth + 'px';
+            divider.setAttribute('aria-valuenow', String(Math.round(actualRatio * 100)));
+
+            if (rememberRatio) {
+                lastLeftRatio = actualRatio;
+            }
+        };
+
+        const finishDragging = (pointerId) => {
+            if (!isDragging || (pointerId !== undefined && pointerId !== activePointerId)) return;
+
+            if (activePointerId !== null && divider.hasPointerCapture?.(activePointerId)) {
+                divider.releasePointerCapture(activePointerId);
+            }
+
+            isDragging = false;
+            activePointerId = null;
+            divider.classList.remove('active');
+            divider.classList.remove('hover');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+
+        divider.addEventListener('pointerenter', (event) => {
+            if (event.pointerType !== 'touch') {
+                divider.classList.add('hover');
+            }
         });
 
-        divider.addEventListener('mouseleave', () => {
+        divider.addEventListener('pointerleave', () => {
             if (!isDragging) {
                 divider.classList.remove('hover');
             }
         });
 
-        divider.addEventListener('mousedown', () => {
+        divider.addEventListener('pointerdown', (event) => {
+            if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+
             isDragging = true;
+            activePointerId = event.pointerId;
+            const containerRect = container.getBoundingClientRect();
+            dragPointerOffset = event.clientX
+                - containerRect.left
+                - leftPane.getBoundingClientRect().width;
             divider.classList.add('active');
             document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            divider.setPointerCapture?.(event.pointerId);
+            event.preventDefault();
         });
 
         divider.addEventListener('dblclick', () => {
-            const containerRect = container.getBoundingClientRect();
-            const totalWidth = containerRect.width;
-            const dividerWidth = divider.offsetWidth;
-            const halfWidth = (totalWidth - dividerWidth) / 2;
-
-            leftPane.style.width = halfWidth + 'px';
-            rightPane.style.width = halfWidth + 'px';
+            const { availableWidth } = getDividerMetrics();
+            applyLeftWidth(availableWidth / 2);
         });
 
-        document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            document.body.style.userSelect = 'none';
-            const containerRect = container.getBoundingClientRect();
-            const totalWidth = containerRect.width;
-            const offsetX = e.clientX - containerRect.left;
-            const dividerWidth = divider.offsetWidth;
+        divider.addEventListener('pointermove', (event) => {
+            if (!isDragging || event.pointerId !== activePointerId) return;
 
-            // Prevent overlap or out-of-bounds
-            const minWidth = 100;
-            const maxWidth = totalWidth - minWidth - dividerWidth;
-            const leftWidth = Math.max(minWidth, Math.min(offsetX, maxWidth));
-            leftPane.style.width = leftWidth + 'px';
-            rightPane.style.width = (totalWidth - leftWidth - dividerWidth) + 'px';
-            lastLeftRatio = leftWidth / (totalWidth - dividerWidth);
+            const { containerRect } = getDividerMetrics();
+            applyLeftWidth(event.clientX - containerRect.left - dragPointerOffset);
+            event.preventDefault();
         });
 
-        document.addEventListener('mouseup', () => {
-            if (isDragging) {
-                isDragging = false;
-                divider.classList.remove('active');
-                divider.classList.remove('hover');
-                document.body.style.cursor = 'default';
-                document.body.style.userSelect = '';
+        divider.addEventListener('pointerup', (event) => {
+            finishDragging(event.pointerId);
+        });
+
+        divider.addEventListener('pointercancel', (event) => {
+            finishDragging(event.pointerId);
+        });
+
+        divider.addEventListener('lostpointercapture', () => {
+            finishDragging();
+        });
+
+        divider.addEventListener('keydown', (event) => {
+            const metrics = getDividerMetrics();
+            if (metrics.availableWidth <= 0) return;
+
+            const currentLeftWidth = leftPane.getBoundingClientRect().width;
+            const keyboardStep = Math.max(10, metrics.availableWidth * keyboardStepRatio);
+            let nextLeftWidth;
+
+            switch (event.key) {
+                case 'ArrowLeft':
+                    nextLeftWidth = currentLeftWidth - keyboardStep;
+                    break;
+                case 'ArrowRight':
+                    nextLeftWidth = currentLeftWidth + keyboardStep;
+                    break;
+                case 'Home':
+                    nextLeftWidth = metrics.effectiveMinPaneWidth;
+                    break;
+                case 'End':
+                    nextLeftWidth = metrics.availableWidth - metrics.effectiveMinPaneWidth;
+                    break;
+                default:
+                    return;
             }
+
+            event.preventDefault();
+            applyLeftWidth(nextLeftWidth);
         });
 
         window.addEventListener('resize', () => {
-            const containerRect = container.getBoundingClientRect();
-            const totalWidth = containerRect.width;
-            const dividerWidth = divider.offsetWidth;
-            const availableWidth = totalWidth - dividerWidth;
-
-            const newLeft = availableWidth * lastLeftRatio;
-            const newRight = availableWidth * (1 - lastLeftRatio);
-
-            leftPane.style.width = newLeft + 'px';
-            rightPane.style.width = newRight + 'px';
+            const { availableWidth } = getDividerMetrics();
+            applyLeftWidth(availableWidth * lastLeftRatio, false);
         });
     };
 

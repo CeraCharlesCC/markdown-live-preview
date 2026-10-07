@@ -6,6 +6,7 @@
     <meta http-equiv="content-script-type" content="text/javascript">
     <meta http-equiv="content-style-type" content="text/css">
     <meta name="description" content="This is the online markdown editor with live preview.">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <script>
       (function(){
@@ -30,7 +31,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" type="text/css" href="css/style.css?v=2c7cf80bc9e0">
+    <link rel="stylesheet" type="text/css" href="css/style.css?v=b65e6a1d8cb0">
     <link rel="icon" type="image/png" href="favicon.png">
     <script type="module" src="/src/main.js?v=1.13.0"></script>
     <title>Markdown Live Preview</title>
@@ -72,7 +73,7 @@
             </div>
         </div>
 
-        <div id="split-divider" class="split-divider"></div>
+        <div id="split-divider" class="split-divider" role="separator" aria-label="Resize editor and preview panes" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" tabindex="0"></div>
 
         <div id="preview" class="column preview-pane">
             <div id="preview-wrapper">
