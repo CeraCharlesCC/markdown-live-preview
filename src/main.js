@@ -158,6 +158,15 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             .replace(/'/g, '&#39;');
     };
 
+    let markAsNotranslatable = (element) => {
+        element.setAttribute('translate', 'no');
+        element.classList.add('notranslate');
+    };
+
+    let protectTranslationSensitiveContent = (root) => {
+        root.querySelectorAll('pre, code, .mermaid').forEach(markAsNotranslatable);
+    };
+
     let createMarkedRenderer = () => {
         const renderer = new marked.Renderer();
         const renderCode = renderer.code.bind(renderer);
@@ -258,7 +267,9 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         };
         let html = marked.parse(markdown, options);
         let sanitized = DOMPurify.sanitize(html);
-        document.querySelector('#output').innerHTML = sanitized;
+        const outputElement = document.querySelector('#output');
+        outputElement.innerHTML = sanitized;
+        protectTranslationSensitiveContent(outputElement);
         scheduleMermaidRender();
     };
 
