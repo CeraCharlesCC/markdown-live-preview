@@ -182,6 +182,16 @@ footer {
   margin: 0 auto;
 }
 
+.markdown-body .inline-code {
+  padding: .2em .4em;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+  font-size: 85%;
+  white-space: break-spaces;
+  background-color: #818b981f;
+  border-radius: 6px;
+}
+
 /* Print/PDF export */
 @media print {
   @page {
@@ -297,6 +307,10 @@ footer {
 
 [data-theme="dark"] .markdown-body .mermaid-error {
   color: #ff7b72;
+}
+
+[data-theme="dark"] .markdown-body .inline-code {
+  background-color: #656c7633;
 }
 
 .split-container {

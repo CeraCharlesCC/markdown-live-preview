@@ -171,6 +171,11 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         const renderer = new marked.Renderer();
         const renderCode = renderer.code.bind(renderer);
 
+        // Keep inline code in the surrounding translation segment for browser page translation.
+        renderer.codespan = (token) => {
+            return `<span class="inline-code" role="code">${escapeHtml(token.text)}</span>`;
+        };
+
         renderer.code = (token) => {
             const lang = (token.lang || '').match(/^\S*/)?.[0].toLowerCase();
             if (lang !== 'mermaid') {
