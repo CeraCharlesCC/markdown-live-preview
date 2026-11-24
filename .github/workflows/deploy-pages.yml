@@ -8,19 +8,19 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
+    permissions:
+      contents: read
+      pages: read
     runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact_id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,10 +41,50 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        id: upload
+        uses: actions/upload-pages-artifact@v4
         with:
           path: dist
+          retention-days: 7
+
+  deploy:
+    needs: build
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      # The upload service can finish before the artifact is discoverable.
+      - name: Wait for Pages artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$ARTIFACT_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::The upload step did not return a valid artifact ID."
+            exit 1
+          fi
+          for attempt in {1..12}; do
+            if visible_id=$(gh api --method GET \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+              -f name=github-pages \
+              --jq '.artifacts[] | select(.expired == false) | .id') &&
+              [[ "$visible_id" == "$ARTIFACT_ID" ]]; then
+              echo "Pages artifact $ARTIFACT_ID is available."
+              exit 0
+            fi
+            echo "Waiting for Pages artifact $ARTIFACT_ID ($attempt/12)"
+            if [[ "$attempt" != 12 ]]; then sleep 5; fi
+          done
+          echo "::error::Pages artifact $ARTIFACT_ID is not discoverable. Re-run all jobs to upload a fresh artifact."
+          exit 1
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
