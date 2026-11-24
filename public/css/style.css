@@ -182,6 +182,132 @@ footer {
   margin: 0 auto;
 }
 
+/* ChatGPT SVG imports use our own theme, never the pasted stylesheet. */
+.markdown-body .chatgpt-mermaid {
+  --diagram-fg: #24292f;
+  --diagram-node: #eaf2ff;
+  --diagram-border: #6386b6;
+  --diagram-edge: #57606a;
+  --diagram-surface: #fff;
+  --diagram-cluster: #f6f8fa;
+  margin: 0 0 16px;
+  padding: 12px 0;
+  overflow-x: auto;
+}
+
+[data-theme="dark"] .markdown-body .chatgpt-mermaid {
+  --diagram-fg: #e6edf3;
+  --diagram-node: #172e50;
+  --diagram-border: #87b3fa;
+  --diagram-edge: #afb8c1;
+  --diagram-surface: #22272e;
+  --diagram-cluster: #30363d;
+}
+
+.chatgpt-mermaid-stage {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.chatgpt-mermaid-stage > svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  color: var(--diagram-fg);
+  font: 14px system-ui, sans-serif;
+}
+
+.chatgpt-mermaid-stage svg :is(text, tspan) {
+  fill: var(--diagram-fg);
+}
+
+.chatgpt-mermaid-stage svg :is(.node, .actor) :is(rect, circle, ellipse, polygon, path),
+.chatgpt-mermaid-stage svg :is(rect, circle, ellipse, polygon, path).actor {
+  fill: var(--diagram-node);
+  stroke: var(--diagram-border);
+  stroke-width: 1px;
+}
+
+.chatgpt-mermaid-stage svg .node rect {
+  rx: 12px;
+  ry: 12px;
+}
+
+.chatgpt-mermaid-stage svg .cluster rect {
+  fill: var(--diagram-cluster);
+  stroke: var(--diagram-border);
+}
+
+.chatgpt-mermaid-stage svg :is(.flowchart-link, .edgePath .path, .messageLine0, .messageLine1, .actor-line, .transition) {
+  fill: none;
+  stroke: var(--diagram-edge);
+  stroke-width: 1px;
+}
+
+.chatgpt-mermaid-stage svg :is(marker path, .arrowheadPath) {
+  fill: var(--diagram-edge);
+  stroke: var(--diagram-edge);
+}
+
+.chatgpt-mermaid-stage svg :is(.edge-pattern-dashed, .messageLine1) {
+  stroke-dasharray: 3;
+}
+
+.chatgpt-mermaid-stage svg .edge-pattern-dotted {
+  stroke-dasharray: 2;
+}
+
+.chatgpt-mermaid-stage svg .edge-thickness-thick {
+  stroke-width: 3.5px;
+}
+
+.chatgpt-mermaid-stage svg .edgeLabel rect {
+  fill: var(--diagram-surface);
+  stroke: var(--diagram-border);
+  rx: 8px;
+}
+
+.chatgpt-mermaid-stage svg .mermaid-decision .label-container {
+  fill: var(--diagram-surface);
+  stroke-dasharray: 2, 2;
+}
+
+.chatgpt-mermaid-stage svg foreignObject > div {
+  white-space: pre-line;
+  text-align: center;
+}
+
+.chatgpt-mermaid-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.chatgpt-mermaid-label {
+  position: absolute;
+  box-sizing: border-box;
+  text-align: center;
+  line-height: 1.15;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  color: var(--diagram-fg);
+  pointer-events: auto;
+}
+
+.markdown-body .chatgpt-mermaid-notice {
+  font-size: 85%;
+  color: var(--diagram-fg);
+  border-inline-start: 3px solid var(--diagram-border);
+  padding-inline-start: 10px;
+}
+
+.chatgpt-mermaid-fallback {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .markdown-body .inline-code {
   padding: .2em .4em;
   margin: 0;
@@ -194,6 +320,16 @@ footer {
 
 /* Print/PDF export */
 @media print {
+  [data-theme] .markdown-body .chatgpt-mermaid {
+    --diagram-fg: #24292f;
+    --diagram-node: #eaf2ff;
+    --diagram-border: #6386b6;
+    --diagram-edge: #57606a;
+    --diagram-surface: #fff;
+    --diagram-cluster: #f6f8fa;
+    break-inside: avoid;
+    overflow: visible;
+  }
   @page {
     size: A4 portrait;
     margin: 10mm;

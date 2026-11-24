@@ -1,0 +1,110 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../css/style.css">
+<title>ChatGPT Mermaid browser tests</title>
+<body class="markdown-body" data-result="pending">
+<div class="chatgpt-mermaid">
+  <div class="chatgpt-mermaid-stage" id="stage"></div>
+</div>
+<pre id="results"></pre>
+<script type="module">
+import { sanitizeChatGPTSvg, recoverChatGPTClipboard, installChatGPTLabels } from '../src/chatgpt-mermaid.js';
+
+const id = 'chatgpt-mermaid-_r_11p_';
+const css = '#' + id + '{font-family:system-ui;}';
+const source = '<svg id="' + id + '" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 170" onload="window.bad=true">'
+    + '<style>' + css + 'body{display:none}</style>'
+    + '<defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3"><path d="M0 0 L6 3 L0 6Z"/></marker></defs>'
+    + '<g class="node"><rect x="20" y="10" width="200" height="50"/><text x="120" y="40" text-anchor="middle">First label</text></g>'
+    + '<path class="flowchart-link" d="M120 60 L120 100" marker-end="url(#arrow)" style="stroke-width:2;filter:url(https://example.invalid/bad)"/>'
+    + '<g class="node"><rect x="20" y="105" width="200" height="50"/><foreignObject x="30" y="110" width="180" height="40"><div xmlns="http://www.w3.org/1999/xhtml" onclick="window.bad=true">Second label</div></foreignObject></g>'
+    + '<script>window.bad=true</' + 'script><image href="https://example.invalid/bad"/>'
+    + '</svg>';
+
+const assert = (condition, message) => {
+    if (!condition) throw Error(message);
+    document.querySelector('#results').textContent += 'PASS ' + message + '\n';
+};
+try {
+    const safe = sanitizeChatGPTSvg(source, 'chatgpt-mermaid-import-test');
+    assert(safe && safe.querySelectorAll('.node').length === 2, 'SVG geometry preserved');
+    assert(!safe.querySelector('style, script, image, [onload], [onclick], [filter]'), 'Unsafe SVG content removed');
+    assert(safe.querySelector('.flowchart-link').getAttribute('marker-end') === 'url(#chatgpt-mermaid-import-test-1)', 'Arrow references rewritten');
+    assert(sanitizeChatGPTSvg(source.replace(' xmlns="http://www.w3.org/2000/svg"', ''), 'chatgpt-mermaid-import-no-xmlns'), 'HTML SVG without xmlns supported');
+    const clipboard = source.replace('<script>window.bad=true</' + 'script>', '').replace('body{display:none}', '');
+    const recovered = recoverChatGPTClipboard('Intro\n\n' + css + 'First labelSecond label\n\n## After', clipboard);
+    assert(recovered.includes('```chatgpt-mermaid') && recovered.includes('## After') && !recovered.includes('First labelSecond label'), 'Rich clipboard recovery preserves surrounding Markdown');
+    const withoutCss = recoverChatGPTClipboard('Intro\n\nFirst label\nSecond label\n\n## After', clipboard);
+    assert(withoutCss.includes('```chatgpt-mermaid') && withoutCss.includes('## After'), 'Rich clipboard without CSS recovered');
+    assert(recoverChatGPTClipboard('ordinary **Markdown**', '<p>ordinary <strong>Markdown</strong></p>') === null, 'Ordinary pastes unchanged');
+    const stage = document.querySelector('#stage');
+    stage.append(safe);
+    const dispose = installChatGPTLabels(stage, safe);
+    const labels = stage.querySelectorAll('.chatgpt-mermaid-label');
+    assert(labels.length === 2 && labels[0].textContent === 'First label' && labels[1].textContent === 'Second label', 'SVG and foreignObject labels exposed as HTML');
+    assert(labels[0].namespaceURI === 'http://www.w3.org/1999/xhtml' && !labels[0].closest('.notranslate,[translate=no]'), 'Labels are outside translation-excluded SVG');
+    assert(!labels[0].hidden && parseFloat(labels[0].style.top) > 0 && parseFloat(labels[1].style.top) > parseFloat(labels[0].style.top), 'HTML labels positioned over corresponding nodes');
+    labels[0].textContent = 'Translated label with a longer sentence';
+    stage.style.width = '180px';
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    assert(labels[0].textContent.startsWith('Translated'), 'Translated text retained on resizing');
+    assert(!window.bad, 'No imported script executed');
+    dispose();
+    // Exercise the actual Monaco paste listener and Markdown preview, not
+    // just the import helpers. Load a document with the existing Open action.
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'width:900px;height:500px;';
+    frame.src = '../';
+    document.body.append(frame);
+    const waitFor = async (predicate, message) => {
+        for (let i = 0; i < 200; i++) {
+            if (predicate()) return;
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        throw Error(message);
+    };
+    await waitFor(() => frame.contentDocument?.querySelector('#output .mermaid svg'), 'App did not render its initial Mermaid diagram');
+    const app = frame.contentWindow;
+    const doc = frame.contentDocument;
+    const input = doc.querySelector('#open-file-input');
+    const load = text => {
+        const transfer = new app.DataTransfer();
+        transfer.items.add(new app.File([text], 'test.md', {type: 'text/markdown'}));
+        input.files = transfer.files;
+        input.dispatchEvent(new app.Event('change'));
+    };
+    const markdown = '# Existing heading\n\nText with `inline code`.\n\n' +
+        '```js\nlet value = 1;\n```\n\n```mermaid\nflowchart TD\nA[Start] --> B[End]\n```\n\n' +
+        css + 'Only copied labels';
+    load(markdown);
+    await waitFor(() => doc.querySelector('.chatgpt-mermaid-fallback'), 'CSS-only preview did not render');
+    assert(doc.querySelector('.chatgpt-mermaid-fallback').textContent === 'Only copied labels', 'CSS-only paste hides stylesheet without guessing graph');
+    assert(!doc.querySelector('.chatgpt-mermaid-notice a'), 'CSS-only fallback does not offer a copy helper page');
+    const copiedSvg = new DOMParser().parseFromString(clipboard, 'image/svg+xml').documentElement;
+    copiedSvg.querySelectorAll('style, script').forEach(node => node.remove());
+    load('# Existing heading\n\n```chatgpt-mermaid\n' + new XMLSerializer().serializeToString(copiedSvg) + '\n```');
+    await waitFor(() => doc.querySelector('#output .chatgpt-mermaid-stage svg'), 'Copied chatgpt-mermaid fence did not render');
+    assert(doc.querySelector('#output .chatgpt-mermaid-label').textContent === 'First label', 'Plain Markdown with a copied SVG fence renders');
+    load(markdown);
+    await waitFor(() => doc.querySelector('.chatgpt-mermaid-fallback'), 'Restored CSS-only preview did not render');
+    assert(doc.querySelector('pre code').closest('[translate=no]') && !doc.querySelector('.inline-code').closest('[translate=no]'), 'Existing code translation policy retained');
+    await waitFor(() => doc.querySelector('#output .mermaid svg'), 'Ordinary Mermaid did not render');
+    const transfer = new app.DataTransfer();
+    transfer.setData('text/plain', css + 'First labelSecond label');
+    transfer.setData('text/html', clipboard);
+    const paste = new app.ClipboardEvent('paste', {clipboardData: transfer, bubbles: true, cancelable: true});
+    doc.querySelector('#editor-wrapper').dispatchEvent(paste);
+    await waitFor(() => doc.querySelector('#output .chatgpt-mermaid-stage svg'), 'Rich paste was not recovered by Monaco');
+    assert(paste.defaultPrevented && doc.querySelector('#output .chatgpt-mermaid-label').textContent === 'First label', 'Editor rich paste renders original diagram');
+    assert(doc.querySelector('#output h1').textContent === 'Existing heading', 'Rich paste leaves existing Markdown intact');
+    const imported = doc.querySelector('#output .chatgpt-mermaid-stage');
+    imported.querySelector('.chatgpt-mermaid-label').textContent = 'Simulated translation';
+    doc.querySelector('#theme-checkbox').click();
+    assert(imported.querySelector('.chatgpt-mermaid-label').textContent === 'Simulated translation', 'Theme change preserves translated imported labels');
+    frame.remove();
+    document.body.dataset.result = 'pass';
+} catch (error) {
+    document.body.dataset.result = 'fail';
+    document.querySelector('#results').textContent += 'FAIL ' + error.stack;
+}
+</script>

@@ -4,7 +4,7 @@
   "description": "[Markdown Live Preview](https://markdownlivepreview.com/) is a tiny web tool to preview Markdown formatted text.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test tests/*.test.mjs",
     "update:css-version": "node scripts/update-css-version.mjs",
     "dev": "vite",
     "build": "vite build",

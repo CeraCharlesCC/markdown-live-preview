@@ -3,6 +3,10 @@ import * as monaco from 'monaco-editor';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import mermaid from 'mermaid';
+import {
+    chatGPTMermaidExtension, readChatGPTCss, readChatGPTSvg,
+    sanitizeChatGPTSvg, recoverChatGPTClipboard, installChatGPTLabels
+} from './chatgpt-mermaid.js';
 
 const init = () => {
     let hasEdited = false;
@@ -15,6 +19,8 @@ const init = () => {
     const confirmationMessage = 'Are you sure you want to reset? Your changes will be lost.';
     let mermaidRenderTimer = null;
     let mermaidRenderVersion = 0;
+    let importedDiagramId = 0;
+    let importedDiagrams = new Map();
     // default template
     const defaultInput = `# Markdown syntax guide
 
@@ -129,6 +135,23 @@ This web site is using ${"`"}markedjs/marked${"`"}.
             saveLastContent(value);
         });
 
+        // Monaco normally reads only text/plain. Recover the original SVG
+        // before that happens, without changing ordinary Markdown pastes.
+        document.querySelector('#editor-wrapper').addEventListener('paste', (event) => {
+            const clipboard = event.clipboardData;
+            if (!clipboard) return;
+            const recovered = recoverChatGPTClipboard(
+                clipboard.getData('text/plain'), clipboard.getData('text/html'));
+            if (recovered === null) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            editor.pushUndoStop();
+            editor.executeEdits('chatgpt-mermaid-paste', editor.getSelections().map(range => ({
+                range, text: recovered, forceMoveMarkers: true
+            })));
+            editor.pushUndoStop();
+        }, true);
+
         editor.onDidScrollChange((e) => {
             if (!scrollBarSync) {
                 return;
@@ -167,6 +190,9 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         root.querySelectorAll('pre, code, .mermaid').forEach(markAsNotranslatable);
     };
 
+    let renderChatGPTMermaid = (source) =>
+        `<div class="chatgpt-mermaid" data-chatgpt-mermaid="true">${escapeHtml(source)}</div>\n`;
+
     let createMarkedRenderer = () => {
         const renderer = new marked.Renderer();
         const renderCode = renderer.code.bind(renderer);
@@ -178,6 +204,11 @@ This web site is using ${"`"}markedjs/marked${"`"}.
 
         renderer.code = (token) => {
             const lang = (token.lang || '').match(/^\S*/)?.[0].toLowerCase();
+            if (lang === 'chatgpt-mermaid' ||
+                (['', 'css', 'html', 'svg', 'xml', 'mermaid'].includes(lang) &&
+                    (readChatGPTCss(token.text) || readChatGPTSvg(token.text)))) {
+                return renderChatGPTMermaid(token.text);
+            }
             if (lang !== 'mermaid') {
                 return renderCode(token);
             }
@@ -262,6 +293,38 @@ This web site is using ${"`"}markedjs/marked${"`"}.
     };
 
     let renderer = createMarkedRenderer();
+    marked.use({ extensions: [chatGPTMermaidExtension(renderChatGPTMermaid)] });
+
+    let prepareImportedDiagram = (element, source) => {
+        element.replaceChildren();
+        const svg = readChatGPTSvg(source) &&
+            sanitizeChatGPTSvg(source, `chatgpt-mermaid-import-${++importedDiagramId}`);
+        if (svg) {
+            const stage = document.createElement('div');
+            stage.className = 'chatgpt-mermaid-stage';
+            stage.append(svg);
+            element.append(stage);
+            return installChatGPTLabels(stage, svg);
+        }
+
+        // A stylesheet has no topology. Never invent connections or split
+        // concatenated labels by guessing. Keep all remaining text readable.
+        const css = readChatGPTCss(source);
+        const notice = document.createElement('p');
+        notice.className = 'chatgpt-mermaid-notice';
+        notice.textContent = css
+            ? 'Only the diagram CSS and text were copied. Copy the original diagram (SVG/HTML) or Mermaid source to display its connections.'
+            : 'Unable to read the copied ChatGPT diagram. Paste its complete SVG or Mermaid source.';
+        element.append(notice);
+        const labels = css ? css.labels : source;
+        if (labels) {
+            const text = document.createElement('div');
+            text.className = 'chatgpt-mermaid-fallback';
+            text.textContent = labels;
+            element.append(text);
+        }
+        return () => {};
+    };
 
     // Render markdown text as html
     let convert = (markdown) => {
@@ -273,8 +336,29 @@ This web site is using ${"`"}markedjs/marked${"`"}.
         let html = marked.parse(markdown, options);
         let sanitized = DOMPurify.sanitize(html);
         const outputElement = document.querySelector('#output');
-        outputElement.innerHTML = sanitized;
+        ++mermaidRenderVersion;
+        const template = document.createElement('template');
+        template.innerHTML = sanitized;
+        const nextDiagrams = new Map();
+        const pending = [];
+        for (const placeholder of template.content.querySelectorAll('[data-chatgpt-mermaid="true"]')) {
+            const source = placeholder.textContent;
+            const previous = importedDiagrams.get(source)?.shift();
+            const entry = previous || { element: placeholder, dispose: null };
+            if (previous) placeholder.replaceWith(previous.element);
+            else pending.push({ source, entry });
+            if (!nextDiagrams.has(source)) nextDiagrams.set(source, []);
+            nextDiagrams.get(source).push(entry);
+        }
+        for (const entries of importedDiagrams.values()) {
+            for (const entry of entries) entry.dispose?.();
+        }
+        importedDiagrams = nextDiagrams;
+        outputElement.replaceChildren(template.content);
         protectTranslationSensitiveContent(outputElement);
+        for (const { source, entry } of pending) {
+            entry.dispose = prepareImportedDiagram(entry.element, source);
+        }
         scheduleMermaidRender();
     };
 
